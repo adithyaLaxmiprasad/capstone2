@@ -1,4 +1,4 @@
-name: Selenium tests (pytest) - Chrome (simple)
+name: Selenium tests (pytest) - headed via Xvfb
 
 on:
   push:
@@ -7,16 +7,13 @@ on:
     branches: ["main"]
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
-  selenium:
+  selenium-headed:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Set up Python 3.11
@@ -24,32 +21,36 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install Python deps (pinned selenium + webdriver-manager + plugins)
+      - name: Install system deps (xvfb is required for a virtual display)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb unzip wget ca-certificates
+          # (No need to install chrome/firefox — runners normally have them preinstalled)
+          google-chrome --version || true
+          firefox --version || true
+
+      - name: Install Python deps (pin selenium & webdriver-manager + plugins)
         working-directory: ./selenium-tests
         run: |
           python -m pip install --upgrade pip
           pip install selenium==4.38.0 webdriver-manager pytest pytest-html allure-pytest pytest-xdist pytest-rerunfailures
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-
-      - name: Show versions (debug)
-        run: |
-          python -c "import selenium; print('selenium', selenium.__version__)"
-          google-chrome --version || google-chrome-stable --version || chromium-browser --version || true
-          chromedriver --version || true
+          echo "Python packages installed."
 
       - name: Ensure reports folder exists
         working-directory: ./selenium-tests
-        run: |
-          mkdir -p reports reports/screenshots reports/pagesource reports/browser_logs || true
-          ls -la
+        run: mkdir -p reports reports/screenshots reports/pagesource reports/browser_logs || true
 
-      - name: Run tests (Chrome headless)
+      - name: Run tests (headed) under Xvfb
         working-directory: ./selenium-tests
         env:
           CI: "true"
         run: |
           set -o pipefail
-          pytest -vv --capture=tee-sys --maxfail=1 --browser chrome --headless \
+          # Run tests in a virtual display so browser runs headed (do NOT pass --headless)
+          # xvfb provides a display :99 so Chrome thinks it's running with a real display.
+          # Adjust pytest args as needed (we removed --headless).
+          xvfb-run -s "-screen 0 1920x1080x24" pytest -vv --capture=tee-sys --maxfail=1 --browser chrome \
                  --junitxml=reports/junit-chrome.xml \
                  --html=reports/pytest-report-chrome.html --self-contained-html \
                  --alluredir=reports/allure-results
