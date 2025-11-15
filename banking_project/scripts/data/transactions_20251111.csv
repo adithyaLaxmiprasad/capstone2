@@ -1,0 +1,2 @@
+timestamp,account_no,holder_name,action,amount,balance_after,note
+2025-11-11T13:03:29,CUR-1951AC43B3,doremon,OPEN,500.0,500.0,"Current opened, OD=60.0"
