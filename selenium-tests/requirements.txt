@@ -1,4 +1,7 @@
-selenium>=4.10.0
-pytest>=7.0.0
-pytest-xdist
+selenium==4.38.0
+webdriver-manager
+pytest
+pytest-html
 allure-pytest
+pytest-xdist
+# ...any other deps you already have
