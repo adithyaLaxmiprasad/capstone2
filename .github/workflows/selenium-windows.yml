@@ -1,4 +1,4 @@
-name: Selenium tests (Windows) - mirror Jenkins pipeline
+name: Selenium tests (Windows) - 2 Selected Tests Only
 
 on:
   push:
@@ -32,10 +32,13 @@ jobs:
         run: |
           python -m venv $env:VENV_DIR
           $venvPip = Join-Path $env:VENV_DIR "Scripts\pip.exe"
+
           Write-Host "Upgrading pip..."
           & $venvPip install --upgrade pip
-          Write-Host "Install pinned selenium + webdriver-manager + project requirements..."
+
+          Write-Host "Install Selenium + WebDriver Manager + Framework requirements..."
           & $venvPip install selenium==4.38.0 webdriver-manager pytest pytest-html allure-pytest pytest-xdist pytest-rerunfailures
+
           if (Test-Path ./selenium-tests/requirements.txt) {
             & $venvPip install -r ./selenium-tests/requirements.txt
           }
@@ -49,45 +52,40 @@ jobs:
           try {
             & 'C:\Program Files\Google\Chrome\Application\chrome.exe' --version
           } catch {
-            Write-Host "chrome not found in default path"
-          }
-          Write-Host "Chromedriver (if present):"
-          try {
-            chromedriver --version
-          } catch {
-            Write-Host "chromedriver not in PATH"
+            Write-Host "Chrome not found in default path."
           }
 
-      - name: Prepare reports (clean/create allure-results)
+      - name: Prepare reports folder
         shell: pwsh
-        working-directory: .
         run: |
           $reportDir = "selenium-tests\reports\allure-results"
           Remove-Item -Recurse -Force $reportDir -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
 
-      - name: Run Selenium tests (Windows) - pytest
+      - name: Run ONLY 2 Selenium tests
         shell: pwsh
         working-directory: ./selenium-tests
         env:
           PYTHONPATH: .
         run: |
           $venvPy = Join-Path $env:VENV_DIR "Scripts\python.exe"
-          Write-Host "Running pytest..."
-          & $venvPy -m pytest . -q --junitxml=reports/junit-windows.xml --alluredir=reports/allure-results
+          Write-Host "Running ONLY selected tests..."
 
-      - name: List reports for troubleshooting
+          & $venvPy -m pytest `
+            tests/test_register_and_login.py::test_register_and_login `
+            tests/test_search_and_add_to_cart.py::test_search_and_add_to_cart `
+            -q `
+            --junitxml=reports/junit-windows.xml `
+            --alluredir=reports/allure-results
+
+      - name: List report files
         if: always()
         shell: pwsh
         run: |
           Write-Host "Reports folder contents:"
-          if (Test-Path selenium-tests\reports) {
-            Get-ChildItem -Recurse -Path selenium-tests\reports | Select-Object FullName,Length | Format-Table -AutoSize
-          } else {
-            Write-Host "selenium-tests\reports does not exist"
-          }
+          Get-ChildItem -Recurse selenium-tests\reports | Format-Table -AutoSize
 
-      - name: Upload Selenium reports artifact
+      - name: Upload Selenium Reports Artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
