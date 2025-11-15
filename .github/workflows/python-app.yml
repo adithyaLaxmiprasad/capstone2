@@ -1,0 +1,79 @@
+name: Selenium tests (pytest) - Chrome (webdriver-manager, selenium 4.38.0)
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  selenium-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install Python deps (pinned selenium + webdriver-manager + plugins)
+        working-directory: ./selenium-tests
+        run: |
+          python -m pip install --upgrade pip
+          # Pin selenium to match local (4.38.0) and install webdriver-manager so CI downloads matching chromedriver
+          pip install selenium==4.38.0 webdriver-manager pytest pytest-html allure-pytest pytest-xdist pytest-rerunfailures
+          # Install any other project-specific requirements (if present)
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          echo "Installed Python packages:"
+          python -c "import pkgutil,sys; pkgs=['selenium','webdriver_manager','pytest','pytest_html']; \
+                    print({p: __import__(p).__version__ if hasattr(__import__(p),'__version__') else 'n/a' for p in pkgs})" || true
+
+      - name: Show environment / browser info (debug)
+        run: |
+          echo "=== Python ==="
+          python --version
+          echo "=== Selenium ==="
+          python -c "import selenium; print('selenium', selenium.__version__)"
+          echo "=== Google Chrome ==="
+          google-chrome --version || google-chrome-stable --version || chromium-browser --version || true
+          echo "=== Chromedriver (if in PATH) ==="
+          chromedriver --version || true
+          echo "=== webdriver-manager info (will download on first driver init) ==="
+          python - <<'PY'
+from webdriver_manager.chrome import ChromeDriverManager
+print("webdriver-manager will download driver to cache dir:", ChromeDriverManager().driver_cache_dir)
+PY
+
+      - name: Ensure reports folder exists
+        working-directory: ./selenium-tests
+        run: |
+          mkdir -p reports reports/screenshots reports/pagesource reports/browser_logs || true
+          ls -la
+
+      - name: Run tests (Chrome headless, verbose, capture output)
+        working-directory: ./selenium-tests
+        env:
+          CI: "true"
+        run: |
+          set -o pipefail
+          # Run tests verbosely and capture logs to console (helpful for debugging in Actions)
+          # If you want faster iteration for a single failing test, replace pytest with a -k or direct node path
+          pytest -vv --capture=tee-sys --maxfail=1 --browser chrome --headless \
+                 --junitxml=reports/junit-chrome.xml \
+                 --html=reports/pytest-report-chrome.html --self-contained-html \
+                 --alluredir=reports/allure-results
+
+      - name: Upload test reports and debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selenium-reports
+          path: selenium-tests/reports/
