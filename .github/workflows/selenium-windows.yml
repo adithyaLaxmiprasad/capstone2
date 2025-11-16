@@ -13,107 +13,31 @@ permissions:
 jobs:
   selenium-windows:
     runs-on: windows-latest
-    timeout-minutes: 60
-
-    env:
-      VENV_DIR: venv
 
     steps:
-    # ------------------------
-    # CHECKOUT
-    # ------------------------
-    - name: Checkout repository
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-    # ------------------------
-    # INSTALL GOOGLE CHROME
-    # ------------------------
-    - name: Install Google Chrome
+    - name: Install Chromium
       shell: pwsh
-      run: |
-        Write-Host "Installing Chrome..."
-        Invoke-WebRequest -Uri "https://dl.google.com/chrome/install/latest/chrome_installer.exe" -OutFile chrome_installer.exe
-        Start-Process chrome_installer.exe -ArgumentList "/silent", "/install" -Wait
-        Write-Host "Chrome Installed."
+      run: choco install chromium --no-progress --yes
 
-    - name: Add Chrome to PATH
+    - name: Add Chromium to PATH
       shell: pwsh
-      run: |
-        echo "C:\Program Files\Google\Chrome\Application" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      run: echo "C:\Program Files (x86)\Chromium\Application" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-    # ------------------------
-    # PYTHON SETUP
-    # ------------------------
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    - uses: actions/setup-python@v4
       with:
         python-version: "3.11"
 
-    # ------------------------
-    # VENV + INSTALL DEPENDENCIES
-    # ------------------------
-    - name: Create virtualenv & install dependencies
+    - name: Create venv & install deps
       shell: pwsh
       run: |
-        python -m venv $env:VENV_DIR
+        python -m venv venv
+        ./venv/Scripts/pip install --upgrade pip
+        ./venv/Scripts/pip install selenium webdriver-manager pytest pytest-html allure-pytest pytest-xdist pytest-rerunfailures
 
-        $venvPip = Join-Path $env:VENV_DIR "Scripts/pip.exe"
-
-        & $venvPip install --upgrade pip
-        & $venvPip install selenium webdriver-manager pytest pytest-html allure-pytest pytest-xdist pytest-rerunfailures
-
-        if (Test-Path "./selenium-tests/requirements.txt") {
-          & $venvPip install -r ./selenium-tests/requirements.txt
-        }
-
-    # ------------------------
-    # PREPARE REPORTS DIR
-    # ------------------------
-    - name: Prepare reports folder
-      shell: pwsh
-      run: |
-        $reportDir = "selenium-tests/reports/allure-results"
-        Remove-Item -Recurse -Force $reportDir -ErrorAction SilentlyContinue
-        New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
-
-    # ------------------------
-    # RUN SELENIUM TESTS (HEADLESS)
-    # ------------------------
-    - name: Run Selenium tests
+    - name: Run Selenium tests (headless)
       shell: pwsh
       working-directory: ./selenium-tests
       run: |
-        $venvPy = "$(Resolve-Path ../venv/Scripts/python.exe)"
-        Write-Host "Using Python: $venvPy"
-
-        & "$venvPy" -m pytest `
-          tests `
-          --headless `
-          -q `
-          --junitxml=reports/junit-windows.xml `
-          --alluredir=reports/allure-results
-
-    # ------------------------
-    # LIST REPORT FILES
-    # ------------------------
-    - name: List report files
-      if: always()
-      shell: pwsh
-      run: |
-        Write-Host "Reports folder contents:"
-        if (Test-Path "selenium-tests/reports") {
-          Get-ChildItem -Recurse "selenium-tests/reports" | Select-Object FullName,Length | Format-Table -AutoSize
-        } else {
-          Write-Host "selenium-tests/reports does not exist"
-        }
-
-    # ------------------------
-    # UPLOAD ARTIFACTS
-    # ------------------------
-    - name: Upload Selenium Reports Artifact
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: selenium-reports-windows
-        path: selenium-tests/reports/
-        if-no-files-found: ignore
+        ../venv/Scripts/python -m pytest tests --headless -q
