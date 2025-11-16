@@ -1,53 +1,104 @@
-# selenium-tests/pages/checkout_page.py
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+# selenium-tests/conftest.py
+import pytest
+import allure
+import os
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options as ChromeOptions
+from selenium.webdriver.edge.options import Options as EdgeOptions
 
-class CheckoutPage:
-    # Login (appears if user isn't logged in)
-    LOGIN_EMAIL = (By.ID, "Email")
-    LOGIN_PASSWORD = (By.ID, "Password")
-    LOGIN_BUTTON = (By.CSS_SELECTOR, "button.login-button")
+IS_CI = os.getenv("GITHUB_ACTIONS") == "true"
 
-    # Cart -> Checkout
-    TERMS_CHECKBOX = (By.ID, "termsofservice")
-    CHECKOUT_BUTTON = (By.ID, "checkout")
 
-    # Checkout step continue buttons
-    BILLING_CONTINUE = (By.CSS_SELECTOR, "button.new-address-next-step-button")
-    SHIPPING_METHOD_CONTINUE = (By.CSS_SELECTOR, "button.shipping-method-next-step-button")
-    PAYMENT_METHOD_CONTINUE = (By.CSS_SELECTOR, "button.payment-method-next-step-button")
-    PAYMENT_INFO_CONTINUE = (By.CSS_SELECTOR, "button.payment-info-next-step-button")
-    CONFIRM_ORDER_BUTTON = (By.CSS_SELECTOR, "button.confirm-order-next-step-button")
+def get_driver_for(browser: str, headless: bool = False):
+    """
+    Create and return a WebDriver instance.
+    Ensures stable behavior on CI by forcing headless + window-size.
+    """
 
-    def __init__(self, driver, base_url=None, wait_time: int = 20):
-        self.driver = driver
-        self.base_url = base_url.rstrip("/") + "/" if base_url else None
-        self.wait = WebDriverWait(driver, wait_time)
+    # Force headless on CI
+    if IS_CI:
+        headless = True
 
-    # Step 1 — From cart: click terms + checkout
-    def begin_checkout(self):
-        self.wait.until(EC.element_to_be_clickable(self.TERMS_CHECKBOX)).click()
-        self.wait.until(EC.element_to_be_clickable(self.CHECKOUT_BUTTON)).click()
+    if browser.lower() == "chrome":
+        opts = ChromeOptions()
 
-    # Step 2 — Login on checkout page (if login form is visible)
-    # NOTE: this uses a test account; update credentials in conftest/env as needed.
-    def login_checkout(self, email: str, password: str):
-        # Wait for login fields (if they exist)
-        self.wait.until(EC.visibility_of_element_located(self.LOGIN_EMAIL)).clear()
-        self.driver.find_element(*self.LOGIN_EMAIL).send_keys(email)
-        self.driver.find_element(*self.LOGIN_PASSWORD).send_keys(password)
-        self.driver.find_element(*self.LOGIN_BUTTON).click()
+        if headless:
+            opts.add_argument("--headless=new")
 
-        # After login you'll be redirected back to cart; re-click terms + checkout
-        self.wait.until(EC.element_to_be_clickable(self.TERMS_CHECKBOX)).click()
-        self.wait.until(EC.element_to_be_clickable(self.CHECKOUT_BUTTON)).click()
+        # ---- Critical CI stability options ----
+        opts.add_argument("--window-size=1920,1080")
+        opts.add_argument("--start-maximized")
+        opts.add_argument("--disable-gpu")
+        opts.add_argument("--no-sandbox")
+        opts.add_argument("--disable-dev-shm-usage")
+        opts.add_argument("--disable-blink-features=AutomationControlled")
+        opts.add_argument("--disable-infobars")
 
-    # Step 3 — Complete the remaining checkout steps (click "Continue" repeatedly)
-    def complete_checkout_steps(self):
-        # The site might show intermediate wait screens, so we wait for buttons to be clickable
-        self.wait.until(EC.element_to_be_clickable(self.BILLING_CONTINUE)).click()
-        self.wait.until(EC.element_to_be_clickable(self.SHIPPING_METHOD_CONTINUE)).click()
-        self.wait.until(EC.element_to_be_clickable(self.PAYMENT_METHOD_CONTINUE)).click()
-        self.wait.until(EC.element_to_be_clickable(self.PAYMENT_INFO_CONTINUE)).click()
-        self.wait.until(EC.element_to_be_clickable(self.CONFIRM_ORDER_BUTTON)).click()
+        return webdriver.Chrome(options=opts)
+
+    elif browser.lower() == "edge":
+        opts = EdgeOptions()
+
+        if headless:
+            opts.add_argument("--headless=new")
+
+        opts.add_argument("--window-size=1920,1080")
+        opts.add_argument("--start-maximized")
+
+        return webdriver.Edge(options=opts)
+
+    else:
+        raise ValueError("Unsupported browser. Use chrome or edge.")
+
+
+# ------------- CLI options -------------
+def pytest_addoption(parser):
+    parser.addoption("--browser", action="store", default="chrome",
+                     help="Browser: chrome or edge")
+    parser.addoption("--headless", action="store_true", default=False,
+                     help="Run in headless mode")
+
+
+# ------------- fixtures -------------
+@pytest.fixture(scope="session")
+def base_url():
+    return "https://demo.nopcommerce.com/"
+
+
+@pytest.fixture(scope="session")
+def browser_name(request):
+    return request.config.getoption("--browser")
+
+
+@pytest.fixture(scope="session")
+def headless(request):
+    return request.config.getoption("--headless")
+
+
+@pytest.fixture(scope="function")
+def driver(request, browser_name, headless):
+    drv = get_driver_for(browser_name, headless=headless)
+    drv.implicitly_wait(10)
+    yield drv
+
+    rep_call = getattr(request.node, "rep_call", None)
+    if rep_call and rep_call.failed:
+        try:
+            png = drv.get_screenshot_as_png()
+            allure.attach(
+                png,
+                name=f"screenshot-{request.node.name}",
+                attachment_type=allure.attachment_type.PNG
+            )
+        except:
+            pass
+
+    drv.quit()
+
+
+# -------- pytest hook for attaching result --------
+@pytest.hookimpl(hookwrapper=True, tryfirst=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    rep = outcome.get_result()
+    setattr(item, "rep_" + rep.when, rep)
