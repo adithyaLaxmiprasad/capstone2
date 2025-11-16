@@ -13,10 +13,17 @@ class HomePage:
     def open(self):
         self.driver.get(self.url)
 
-    def search(self, text):
-        WebDriverWait(self.driver, 10).until(
-            EC.element_to_be_clickable(self.SEARCH_INPUT)
-        ).clear()
+        WebDriverWait(self.driver, 20).until(
+            EC.visibility_of_element_located(self.SEARCH_INPUT)
+        )
 
-        self.driver.find_element(*self.SEARCH_INPUT).send_keys(text)
-        self.driver.find_element(*self.SEARCH_BTN).click()
+    def search(self, text):
+        box = WebDriverWait(self.driver, 20).until(
+            EC.element_to_be_clickable(self.SEARCH_INPUT)
+        )
+        box.clear()
+        box.send_keys(text)
+
+        WebDriverWait(self.driver, 20).until(
+            EC.element_to_be_clickable(self.SEARCH_BTN)
+        ).click()
