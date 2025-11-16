@@ -1,4 +1,4 @@
-name: Selenium tests (Windows)
+name: Selenium Tests (Windows)
 
 on:
   push:
@@ -7,37 +7,28 @@ on:
     branches: ["main"]
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
-  selenium-windows:
+  run-tests:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v4
 
-    - name: Install Chromium
-      shell: pwsh
-      run: choco install chromium --no-progress --yes
+    - name: Checkout
+      uses: actions/checkout@v4
 
-    - name: Add Chromium to PATH
-      shell: pwsh
-      run: echo "C:\Program Files (x86)\Chromium\Application" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-    - uses: actions/setup-python@v4
+    - name: Setup Python
+      uses: actions/setup-python@v4
       with:
         python-version: "3.11"
 
-    - name: Create venv & install deps
+    - name: Create venv & Install deps
       shell: pwsh
       run: |
         python -m venv venv
         ./venv/Scripts/pip install --upgrade pip
-        ./venv/Scripts/pip install selenium webdriver-manager pytest pytest-html allure-pytest pytest-xdist pytest-rerunfailures
+        ./venv/Scripts/pip install selenium pytest allure-pytest pytest-html
 
-    - name: Run Selenium tests (headless)
+    - name: Run Selenium Tests (headless edge)
       shell: pwsh
       working-directory: ./selenium-tests
-      run: |
-        ../venv/Scripts/python -m pytest tests --headless -q
+      run: ../venv/Scripts/python -m pytest tests --headless -q
