@@ -50,7 +50,7 @@ jobs:
         python-version: "3.11"
 
     # ------------------------
-    # VENV + DEPENDENCIES
+    # VENV + INSTALL DEPENDENCIES
     # ------------------------
     - name: Create virtualenv & install dependencies
       shell: pwsh
@@ -62,7 +62,6 @@ jobs:
         & $venvPip install --upgrade pip
         & $venvPip install selenium webdriver-manager pytest pytest-html allure-pytest pytest-xdist pytest-rerunfailures
 
-        # Install extra requirements if your folder has requirements.txt
         if (Test-Path "./selenium-tests/requirements.txt") {
           & $venvPip install -r ./selenium-tests/requirements.txt
         }
@@ -78,7 +77,7 @@ jobs:
         New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
 
     # ------------------------
-    # RUN SELENIUM TESTS
+    # RUN SELENIUM TESTS (HEADLESS)
     # ------------------------
     - name: Run Selenium tests
       shell: pwsh
@@ -87,9 +86,10 @@ jobs:
         $venvPy = "$(Resolve-Path ../venv/Scripts/python.exe)"
         Write-Host "Using Python: $venvPy"
 
-        # Run all tests inside tests/ folder
         & "$venvPy" -m pytest `
-          tests -q `
+          tests `
+          --headless `
+          -q `
           --junitxml=reports/junit-windows.xml `
           --alluredir=reports/allure-results
 
