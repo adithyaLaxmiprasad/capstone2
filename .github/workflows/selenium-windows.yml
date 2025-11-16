@@ -31,8 +31,7 @@ jobs:
 
       - name: Add Chrome to PATH
         shell: pwsh
-        run: |
-          echo "C:\Program Files\Google\Chrome\Application" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        run: echo "C:\Program Files\Google\Chrome\Application" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -47,12 +46,16 @@ jobs:
           & $venvPip install --upgrade pip
           & $venvPip install selenium webdriver-manager pytest pytest-html allure-pytest pytest-xdist pytest-rerunfailures
 
-      - name: Run ONLY selected tests
-        working-directory: ./selenium-tests
+      - name: Run 2 Selenium tests
         shell: pwsh
+        working-directory: ./selenium-tests
         run: |
-          $venvPy = Join-Path $env:VENV_DIR "Scripts/python.exe"
-          & $venvPy -m pytest `
+          $venvPy = "$(Resolve-Path ../venv/Scripts/python.exe)"
+          Write-Host "Using Python: $venvPy"
+
+          & "$venvPy" -m pytest `
             tests/test_register_and_login.py::test_register_and_login `
             tests/test_search_and_add_to_cart.py::test_search_and_add_to_cart `
+            -q `
+            --junitxml=reports/junit-windows.xml `
             --alluredir=reports/allure-results
