@@ -1,37 +1,30 @@
 import pytest
 import allure
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options as ChromeOptions
-import shutil
-import os
+from selenium.webdriver.edge.options import Options as EdgeOptions
+from selenium.webdriver.support.events import EventFiringWebDriver
+from selenium.webdriver.chrome.service import Service
+import time
 
-def get_driver_for(browser: str, headless: bool = False):
-    """
-    Always use Chromium in GitHub Actions
-    (Chrome 142 has bugs on Windows CI).
-    """
-    if browser.lower() == "chrome":
-        opts = ChromeOptions()
 
-        # Location of Chromium on Windows GitHub Action runner
-        opts.binary_location = r"C:\Program Files (x86)\Chromium\Application\chromium.exe"
+def get_driver_for(headless=False):
+    """Always use Edge in CI (stable and pre-installed)."""
 
-        if headless:
-            opts.add_argument("--headless=new")
+    opts = EdgeOptions()
+    if headless:
+        opts.add_argument("--headless=new")
+    opts.add_argument("--disable-gpu")
+    opts.add_argument("--no-sandbox")
+    opts.add_argument("--disable-dev-shm-usage")
+    opts.add_argument("--window-size=1920,1080")
 
-        opts.add_argument("--disable-gpu")
-        opts.add_argument("--disable-dev-shm-usage")
-        opts.add_argument("--no-sandbox")
-        opts.add_argument("--window-size=1920,1080")
-
-        return webdriver.Chrome(options=opts)
-
-    raise ValueError("Only Chrome/Chromium supported")
+    # Edge + Selenium auto-detects driver (works in GitHub Actions)
+    return webdriver.Edge(options=opts)
 
 
 def pytest_addoption(parser):
-    parser.addoption("--browser", action="store", default="chrome")
-    parser.addoption("--headless", action="store_true", default=False)
+    parser.addoption("--browser", default="edge")
+    parser.addoption("--headless", action="store_true")
 
 
 @pytest.fixture(scope="session")
@@ -39,28 +32,22 @@ def base_url():
     return "https://demo.nopcommerce.com/"
 
 
-@pytest.fixture(scope="session")
-def browser_name(request):
-    return request.config.getoption("--browser")
-
-
-@pytest.fixture(scope="session")
-def headless(request):
-    return request.config.getoption("--headless")
-
-
 @pytest.fixture(scope="function")
-def driver(request, browser_name, headless):
-    drv = get_driver_for(browser_name, headless=headless)
+def driver(request):
+    headless = request.config.getoption("--headless")
+
+    drv = get_driver_for(headless=headless)
     drv.implicitly_wait(10)
+
     yield drv
 
-    rep_call = getattr(request.node, "rep_call", None)
-    if rep_call and rep_call.failed:
+    # Attach screenshot on failure
+    rep = getattr(request.node, "rep_call", None)
+    if rep and rep.failed:
         try:
             png = drv.get_screenshot_as_png()
-            allure.attach(png, name=f"screenshot-{request.node.name}",
-                           attachment_type=allure.attachment_type.PNG)
+            allure.attach(png, name="failure-screenshot",
+                          attachment_type=allure.attachment_type.PNG)
         except:
             pass
 
