@@ -13,6 +13,15 @@ class RegisterPage:
     def open(self):
         self.driver.get(self.url)
 
+        # ---- NEW FIX FOR CI: Close cookie banner ----
+        try:
+            cookie_btn = WebDriverWait(self.driver, 3).until(
+                EC.element_to_be_clickable((By.ID, "eu-cookie-ok"))
+            )
+            self.driver.execute_script("arguments[0].click();", cookie_btn)
+        except:
+            pass  # No cookie popup shown
+
     def register(self, first_name, last_name, email, password):
         self.driver.find_element(By.ID, "FirstName").send_keys(first_name)
         self.driver.find_element(By.ID, "LastName").send_keys(last_name)
@@ -22,17 +31,18 @@ class RegisterPage:
 
         register_btn = self.driver.find_element(By.ID, "register-button")
 
-        # ---- CI FIX: ensure visibility on headless browser ----
+        # Ensure button is visible
         self.driver.execute_script(
             "arguments[0].scrollIntoView({block: 'center'});", register_btn
         )
 
-        # Try normal click; fallback to JS click if needed
+        # Try normal click; fallback to JS click
         try:
             register_btn.click()
         except:
             self.driver.execute_script("arguments[0].click();", register_btn)
 
+        # Wait for success message
         msg = WebDriverWait(self.driver, 10).until(
             EC.visibility_of_element_located((By.CLASS_NAME, "result"))
         ).text
