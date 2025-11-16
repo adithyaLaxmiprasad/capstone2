@@ -1,4 +1,4 @@
-name: Selenium tests (Windows) - 2 Selected Tests Only
+name: Selenium tests (Windows)
 
 on:
   push:
@@ -22,102 +22,37 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11 (Windows)
+      - name: Install Google Chrome
+        shell: pwsh
+        run: |
+          Write-Host "Installing Chrome..."
+          Invoke-WebRequest -Uri "https://dl.google.com/chrome/install/latest/chrome_installer.exe" -OutFile chrome_installer.exe
+          Start-Process chrome_installer.exe -ArgumentList "/silent", "/install" -Wait
+
+      - name: Add Chrome to PATH
+        shell: pwsh
+        run: |
+          echo "C:\Program Files\Google\Chrome\Application" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.11"
 
-      - name: Prepare Python virtualenv & install dependencies (Windows)
+      - name: Create virtualenv & install dependencies
         shell: pwsh
         run: |
-          Write-Host "Creating virtual environment at $env:VENV_DIR"
           python -m venv $env:VENV_DIR
-
-          $venvPip = Join-Path $env:VENV_DIR "Scripts\pip.exe"
-          $venvPy  = Join-Path $env:VENV_DIR "Scripts\python.exe"
-
-          Write-Host "Upgrading pip (venv)..."
+          $venvPip = Join-Path $env:VENV_DIR "Scripts/pip.exe"
           & $venvPip install --upgrade pip
+          & $venvPip install selenium webdriver-manager pytest pytest-html allure-pytest pytest-xdist pytest-rerunfailures
 
-          Write-Host "Installing Selenium, webdriver-manager and test plugins into venv..."
-          & $venvPip install selenium==4.38.0 webdriver-manager pytest pytest-html allure-pytest pytest-xdist pytest-rerunfailures
-
-          if (Test-Path ./selenium-tests/requirements.txt) {
-            Write-Host "Installing project requirements from selenium-tests/requirements.txt..."
-            & $venvPip install -r ./selenium-tests/requirements.txt
-          }
-
-      - name: Show environment info (venv) - debug
-        shell: pwsh
-        run: |
-          $venvPy = Join-Path $env:VENV_DIR "Scripts\python.exe"
-          $venvPip = Join-Path $env:VENV_DIR "Scripts\pip.exe"
-
-          Write-Host "=== venv Python (from $venvPy) ==="
-          & $venvPy --version
-
-          Write-Host "`n=== pip freeze (venv) ==="
-          & $venvPip freeze
-
-          Write-Host "`n=== Selenium version (venv) ==="
-          try {
-            & $venvPy -c "import selenium; print(selenium.__version__)"
-          } catch {
-            Write-Host "selenium is not installed in the venv."
-          }
-
-          Write-Host "`n=== Google Chrome (system) ==="
-          try {
-            & 'C:\Program Files\Google\Chrome\Application\chrome.exe' --version
-          } catch {
-            Write-Host "Chrome not found in default path"
-          }
-
-          Write-Host "`n=== Chromedriver (if present) ==="
-          try {
-            chromedriver --version
-          } catch {
-            Write-Host "chromedriver not in PATH"
-          }
-
-      - name: Prepare reports folder
-        shell: pwsh
-        run: |
-          $reportDir = "selenium-tests\reports\allure-results"
-          Remove-Item -Recurse -Force $reportDir -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
-
-      - name: Run ONLY 2 Selenium tests
-        shell: pwsh
+      - name: Run ONLY selected tests
         working-directory: ./selenium-tests
-        env:
-          PYTHONPATH: .
+        shell: pwsh
         run: |
-          $venvPy = Join-Path $env:VENV_DIR "Scripts\python.exe"
-          Write-Host "Running ONLY selected tests..."
-
+          $venvPy = Join-Path $env:VENV_DIR "Scripts/python.exe"
           & $venvPy -m pytest `
             tests/test_register_and_login.py::test_register_and_login `
             tests/test_search_and_add_to_cart.py::test_search_and_add_to_cart `
-            -q `
-            --junitxml=reports/junit-windows.xml `
             --alluredir=reports/allure-results
-
-      - name: List report files
-        if: always()
-        shell: pwsh
-        run: |
-          Write-Host "Reports folder contents:"
-          if (Test-Path "selenium-tests\reports") {
-            Get-ChildItem -Recurse "selenium-tests\reports" | Select-Object FullName,Length | Format-Table -AutoSize
-          } else {
-            Write-Host "selenium-tests\reports does not exist"
-          }
-
-      - name: Upload Selenium Reports Artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: selenium-reports-windows
-          path: selenium-tests/reports/
-          if-no-files-found: ignore
